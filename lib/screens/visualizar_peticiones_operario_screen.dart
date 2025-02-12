@@ -126,6 +126,27 @@ class _VisualizarPeticionesOperarioScreenState
     }
   }
 
+//cambio de estado de la solicitud de material
+  Future<void> _cambiarEstadoAFinalizado(String productId) async {
+    try {
+      final response = await http.put(
+        Uri.parse(
+            "https://api-psc-warehouse.azurewebsites.net/curso-product/$productId/status/FINALIZADO"),
+      );
+
+      if (response.statusCode == 200) {
+        // Actualizar la lista de peticiones después de cambiar el estado
+        await _fetchPeticiones();
+      } else {
+        // Manejar el error de la API
+        print('Error al cambiar el estado a FINALIZADO');
+      }
+    } catch (e) {
+      // Manejar el error de la solicitud
+      print('Error de conexión al cambiar el estado a FINALIZADO');
+    }
+  }
+
   Widget _buildPeticionCard(Map<String, dynamic> peticion) {
     return Card(
       elevation: 2,
@@ -165,15 +186,24 @@ class _VisualizarPeticionesOperarioScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildInfoRow('ID', peticion['id']?.toString() ?? 'N/A'),
-                _buildInfoRow(
-                    'ID Curso', peticion['id_curso']?.toString() ?? 'N/A'),
                 _buildInfoRow('Línea', peticion['linea']?.toString() ?? 'N/A'),
                 _buildInfoRow('Denominación',
                     peticion['denominacion']?.toString() ?? 'N/A'),
                 _buildInfoRow(
                     'Referencia PT', peticion['refpt']?.toString() ?? 'N/A'),
               ],
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: EdgeInsets.only(right: 16, bottom: 16),
+              child: ElevatedButton(
+                onPressed: () {
+                  _cambiarEstadoAFinalizado(peticion['id'].toString());
+                },
+                child: Text('Recibido'),
+              ),
             ),
           ),
         ],

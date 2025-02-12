@@ -32,6 +32,10 @@ class _PeticionMaterialOperarioScreenState
   bool _isLoading = true;
   String? _successMessage;
 
+  String? selectedLinea;
+  String? toastMessage;
+  bool showToast = false;
+
   @override
   void initState() {
     super.initState();
@@ -100,6 +104,89 @@ class _PeticionMaterialOperarioScreenState
     }
   }
 
+//solicitud de recogida de material
+  Future<void> registrarRecogidaMaterial() async {
+    if (_selectedMateriaPrimaId == null) {
+      setState(() {
+        toastMessage = 'Debe seleccionar una materia prima';
+        showToast = true;
+      });
+      return;
+    }
+
+    final url =
+        'https://api-psc-warehouse.azurewebsites.net/status-recogida/${_selectedMateriaPrimaId}/status/PENDIENTE';
+
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          toastMessage = 'Recogida de material registrada como PENDIENTE';
+          showToast = true;
+        });
+      } else {
+        final errorData = jsonDecode(response.body);
+        print("Error de la API: $errorData");
+        setState(() {
+          toastMessage =
+              'Error al registrar la recogida: ${errorData['message']}';
+          showToast = true;
+        });
+      }
+    } catch (error) {
+      print('Error al enviar la solicitud: $error');
+      setState(() {
+        toastMessage = 'Error al realizar la solicitud';
+        showToast = true;
+      });
+    }
+  }
+
+//boton de support en la linea
+
+  Future<void> registrarSupport() async {
+    if (selectedLinea == null) {
+      setState(() {
+        toastMessage = 'Debe seleccionar una línea';
+        showToast = true;
+      });
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://api-psc-warehouse.azurewebsites.net/support-line'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'linea': selectedLinea}),
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          toastMessage = 'Solicitud de support registrada';
+          showToast = true;
+        });
+      } else {
+        final errorData = jsonDecode(response.body);
+        print("Error de la API: $errorData");
+        setState(() {
+          toastMessage =
+              'Error al registrar la solicitud de support: ${errorData['message']}';
+          showToast = true;
+        });
+      }
+    } catch (error) {
+      print('Error al enviar la solicitud: $error');
+      setState(() {
+        toastMessage = 'Error al realizar la solicitud';
+        showToast = true;
+      });
+    }
+  }
+
   Widget _buildDropdown(String label, List<String> items, String? selectedValue,
       ValueChanged<String?> onChanged) {
     return Padding(
@@ -147,8 +234,7 @@ class _PeticionMaterialOperarioScreenState
                           .toSet()
                           .toList();
                     });
-                    widget
-                        .onLineaSelected(value); // Notificar el cambio de línea
+                    widget.onLineaSelected(value);
                   }),
                   _buildDropdown(
                       "Denominación", _denominaciones, _selectedDenominacion,
@@ -201,6 +287,19 @@ class _PeticionMaterialOperarioScreenState
                         : null,
                     child: Text("SOLICITAR"),
                   ),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: registrarSupport,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                    ),
+                    child: Text('Support'),
+                  ),
+                  SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: registrarRecogidaMaterial,
+                    child: Text('Recogida Material'),
+                  ),
                   if (_successMessage != null)
                     Padding(
                       padding: EdgeInsets.only(top: 16),
@@ -212,6 +311,26 @@ class _PeticionMaterialOperarioScreenState
                               : Colors.green,
                         ),
                         textAlign: TextAlign.center,
+                      ),
+                    ),
+                  if (showToast)
+                    Positioned(
+                      bottom: 20,
+                      left: 20,
+                      right: 20,
+                      child: Container(
+                        padding: EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          toastMessage!,
+                          style: TextStyle(
+                            color: Colors.white,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ),
                 ],
