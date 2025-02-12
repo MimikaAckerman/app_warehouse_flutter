@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async';
 
 class VisualizarPeticionesOperarioScreen extends StatefulWidget {
-  final String? selectedLinea;
+  final String? lineaSeleccionada;
 
-  const VisualizarPeticionesOperarioScreen({Key? key, this.selectedLinea})
-      : super(key: key);
+  const VisualizarPeticionesOperarioScreen({
+    Key? key,
+    required this.lineaSeleccionada,
+  }) : super(key: key);
 
   @override
   _VisualizarPeticionesOperarioScreenState createState() =>
@@ -16,43 +19,110 @@ class VisualizarPeticionesOperarioScreen extends StatefulWidget {
 class _VisualizarPeticionesOperarioScreenState
     extends State<VisualizarPeticionesOperarioScreen> {
   List<Map<String, dynamic>> _peticiones = [];
-  bool _isLoading = true;
+  bool _isLoading = false;
   String? _error;
+  StreamController<List<Map<String, dynamic>>>? _peticionesController;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
+    _initPeticionesStream();
+  }
+
+  @override
+  void didUpdateWidget(VisualizarPeticionesOperarioScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.lineaSeleccionada != widget.lineaSeleccionada) {
+      _restartStream();
+    }
+  }
+
+  void _initPeticionesStream() {
+    _peticionesController = StreamController<List<Map<String, dynamic>>>();
+    _peticionesController?.stream.listen((peticiones) {
+      if (mounted) {
+        setState(() {
+          _peticiones = peticiones;
+          _isLoading = false;
+        });
+      }
+    });
+
+    // Iniciar actualizaciones automáticas
+    _startAutoRefresh();
+  }
+
+  void _startAutoRefresh() {
+    // Cancelar el timer existente si hay uno
+    _refreshTimer?.cancel();
+
+    // Hacer la primera carga inmediatamente
     _fetchPeticiones();
+
+    // Configurar actualizaciones automáticas cada 5 segundos
+    _refreshTimer = Timer.periodic(Duration(seconds: 5), (timer) {
+      if (mounted && widget.lineaSeleccionada != null) {
+        _fetchPeticiones();
+      }
+    });
+  }
+
+  void _restartStream() {
+    _peticionesController?.close();
+    _refreshTimer?.cancel();
+    _initPeticionesStream();
   }
 
   Future<void> _fetchPeticiones() async {
+    if (widget.lineaSeleccionada == null || !mounted) return;
+
     try {
       final response = await http.get(
         Uri.parse("https://api-psc-warehouse.azurewebsites.net/curso-products"),
       );
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
-        final List<dynamic> rawData = jsonDecode(response.body);
+        if (response.body.isEmpty) {
+          _peticionesController?.add([]);
+          return;
+        }
+
+        final dynamic decodedData = jsonDecode(response.body);
+
+        if (decodedData == null || decodedData is! List) {
+          _peticionesController?.add([]);
+          return;
+        }
+
+        final List<dynamic> rawData = decodedData;
+
+        final peticionesFiltradas = rawData
+            .where((item) =>
+                item['linea'] == widget.lineaSeleccionada &&
+                item['status'] == "SOLICITADO")
+            .toList();
+
+        _peticionesController?.add(peticionesFiltradas
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList());
+
         setState(() {
-          _peticiones = rawData
-              .map((item) => Map<String, dynamic>.from(item))
-              .where((item) =>
-                  widget.selectedLinea == null ||
-                  item['linea']?.toString() == widget.selectedLinea)
-              .toList();
-          _isLoading = false;
+          _error = null;
         });
       } else {
         setState(() {
-          _error = "Error al cargar las peticiones";
-          _isLoading = false;
+          _error = 'Error en la respuesta del servidor';
         });
       }
     } catch (e) {
-      setState(() {
-        _error = "Error de conexión";
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = null;
+        });
+      }
     }
   }
 
@@ -65,7 +135,7 @@ class _VisualizarPeticionesOperarioScreenState
       ),
       child: ExpansionTile(
         title: Text(
-          'Referencia: ${peticion['no'] ?? 'N/A'}',
+          peticion['no'] ?? 'N/A',
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 16,
@@ -74,15 +144,16 @@ class _VisualizarPeticionesOperarioScreenState
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: 4),
             Text(
-              'Línea: ${peticion['linea'] ?? 'N/A'}',
-              style: TextStyle(color: Colors.grey[700]),
+              'Ref: ${peticion['refpt'] ?? 'N/A'}',
+              style: TextStyle(
+                color: Colors.grey[600],
+              ),
             ),
             Text(
               'Estado: ${peticion['status'] ?? 'N/A'}',
               style: TextStyle(
-                color: _getStatusColor(peticion['status']),
+                color: Colors.blue,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -90,14 +161,18 @@ class _VisualizarPeticionesOperarioScreenState
         ),
         children: [
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildDetailRow('Denominación', peticion['denominacion']),
-                _buildDetailRow('Materia Prima', peticion['refpt']),
-                _buildDetailRow('Fecha', _formatDate(peticion['date'])),
-                _buildDetailRow('ID', peticion['id']),
+                _buildInfoRow('ID', peticion['id']?.toString() ?? 'N/A'),
+                _buildInfoRow(
+                    'ID Curso', peticion['id_curso']?.toString() ?? 'N/A'),
+                _buildInfoRow('Línea', peticion['linea']?.toString() ?? 'N/A'),
+                _buildInfoRow('Denominación',
+                    peticion['denominacion']?.toString() ?? 'N/A'),
+                _buildInfoRow(
+                    'Referencia PT', peticion['refpt']?.toString() ?? 'N/A'),
               ],
             ),
           ),
@@ -106,7 +181,7 @@ class _VisualizarPeticionesOperarioScreenState
     );
   }
 
-  Widget _buildDetailRow(String label, dynamic value) {
+  Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -117,15 +192,17 @@ class _VisualizarPeticionesOperarioScreenState
             child: Text(
               '$label:',
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w500,
                 color: Colors.grey[700],
               ),
             ),
           ),
           Expanded(
             child: Text(
-              value?.toString() ?? 'N/A',
-              style: TextStyle(color: Colors.black87),
+              value,
+              style: TextStyle(
+                color: Colors.black87,
+              ),
             ),
           ),
         ],
@@ -133,104 +210,91 @@ class _VisualizarPeticionesOperarioScreenState
     );
   }
 
-  Color _getStatusColor(String? status) {
-    switch (status?.toUpperCase()) {
-      case 'SOLICITADO':
-        return Colors.orange;
-      case 'COMPLETADO':
-        return Colors.green;
-      case 'CANCELADO':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return 'N/A';
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute}';
-    } catch (e) {
-      return dateStr;
-    }
+  Widget _buildEmptyWidget() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.inbox,
+            color: Colors.grey[400],
+            size: 60,
+          ),
+          SizedBox(height: 16),
+          Text(
+            widget.lineaSeleccionada == null
+                ? 'Seleccione una línea para ver las peticiones'
+                : 'No hay peticiones activas para esta línea',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 16,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Visualizar Peticiones"),
-        elevation: 2,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                _isLoading = true;
-              });
-              _fetchPeticiones();
-            },
+    return Container(
+      color: Colors.grey[50],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: EdgeInsets.all(16),
+            color: Colors.grey[100],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Peticiones Activas ${widget.lineaSeleccionada != null ? "- Línea ${widget.lineaSeleccionada}" : ""}',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.refresh),
+                  onPressed: _fetchPeticiones,
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(
+                        child: Text(
+                          _error!,
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      )
+                    : _peticiones.isEmpty
+                        ? _buildEmptyWidget()
+                        : RefreshIndicator(
+                            onRefresh: _fetchPeticiones,
+                            child: ListView.builder(
+                              padding: EdgeInsets.all(16),
+                              itemCount: _peticiones.length,
+                              itemBuilder: (context, index) {
+                                return _buildPeticionCard(_peticiones[index]);
+                              },
+                            ),
+                          ),
           ),
         ],
       ),
-      body: Container(
-        color: Colors.grey[50],
-        child: _isLoading
-            ? Center(child: CircularProgressIndicator())
-            : _error != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          color: Colors.red,
-                          size: 48,
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          _error!,
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontSize: 16,
-                          ),
-                        ),
-                        SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _isLoading = true;
-                              _error = null;
-                            });
-                            _fetchPeticiones();
-                          },
-                          child: Text("Reintentar"),
-                        ),
-                      ],
-                    ),
-                  )
-                : _peticiones.isEmpty
-                    ? Center(
-                        child: Text(
-                          "No hay peticiones${widget.selectedLinea != null ? ' para la línea ${widget.selectedLinea}' : ''}",
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[700],
-                          ),
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _fetchPeticiones,
-                        child: ListView.builder(
-                          padding: EdgeInsets.all(16),
-                          itemCount: _peticiones.length,
-                          itemBuilder: (context, index) {
-                            return _buildPeticionCard(_peticiones[index]);
-                          },
-                        ),
-                      ),
-      ),
     );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _peticionesController?.close();
+    super.dispose();
   }
 }

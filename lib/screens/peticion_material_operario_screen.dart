@@ -3,6 +3,13 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class PeticionMaterialOperarioScreen extends StatefulWidget {
+  final Function(String?) onLineaSelected;
+
+  const PeticionMaterialOperarioScreen({
+    Key? key,
+    required this.onLineaSelected,
+  }) : super(key: key);
+
   @override
   _PeticionMaterialOperarioScreenState createState() =>
       _PeticionMaterialOperarioScreenState();
@@ -15,7 +22,6 @@ class _PeticionMaterialOperarioScreenState
   List<String> _denominaciones = [];
   List<String> _referenciasSolidas = [];
   List<String> _materiasPrimas = [];
-  List<dynamic> _solicitudes = [];
 
   String? _selectedLinea;
   String? _selectedDenominacion;
@@ -24,8 +30,6 @@ class _PeticionMaterialOperarioScreenState
   String? _selectedMateriaPrimaId;
 
   bool _isLoading = true;
-  bool _isLoadingSolicitudes = false;
-  String? _errorSolicitudes;
   String? _successMessage;
 
   @override
@@ -64,44 +68,6 @@ class _PeticionMaterialOperarioScreenState
     }
   }
 
-  Future<void> _fetchSolicitudes() async {
-    if (_selectedLinea == null) return;
-
-    setState(() {
-      _isLoadingSolicitudes = true;
-      _errorSolicitudes = null;
-    });
-
-    try {
-      final response = await http.get(
-        Uri.parse("https://api-psc-warehouse.azurewebsites.net/curso-products"),
-      );
-
-      if (response.statusCode == 200) {
-        List<dynamic> solicitudes = jsonDecode(response.body);
-
-        List<dynamic> solicitudesFiltradas = solicitudes
-            .where((solicitud) => solicitud["linea"] == _selectedLinea)
-            .toList();
-
-        setState(() {
-          _solicitudes = solicitudesFiltradas;
-          _isLoadingSolicitudes = false;
-        });
-      } else {
-        setState(() {
-          _errorSolicitudes = "Error al cargar las solicitudes";
-          _isLoadingSolicitudes = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _errorSolicitudes = "Error de conexión con el servidor";
-        _isLoadingSolicitudes = false;
-      });
-    }
-  }
-
   Future<void> _enviarSolicitud() async {
     if (_selectedMateriaPrimaId == null) return;
 
@@ -126,7 +92,6 @@ class _PeticionMaterialOperarioScreenState
         setState(() {
           _successMessage = null;
         });
-        _fetchSolicitudes(); // Actualizar solicitudes después de enviar una nueva
       });
     } catch (e) {
       setState(() {
@@ -137,118 +102,121 @@ class _PeticionMaterialOperarioScreenState
 
   Widget _buildDropdown(String label, List<String> items, String? selectedValue,
       ValueChanged<String?> onChanged) {
-    return DropdownButtonFormField<String>(
-      value: selectedValue,
-      isExpanded: true,
-      items: items.map((String item) {
-        return DropdownMenuItem<String>(
-          value: item,
-          child: Text(item, overflow: TextOverflow.ellipsis, softWrap: false),
-        );
-      }).toList(),
-      onChanged: onChanged,
-      decoration: InputDecoration(
-          border: OutlineInputBorder(), hintText: "Seleccione $label"),
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 10.0),
+      child: DropdownButtonFormField<String>(
+        value: selectedValue,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: label,
+          border: OutlineInputBorder(),
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        ),
+        items: items.map((String item) {
+          return DropdownMenuItem<String>(
+            value: item,
+            child: Text(item, overflow: TextOverflow.ellipsis),
+          );
+        }).toList(),
+        onChanged: onChanged,
+      ),
     );
-  }
-
-  Widget _buildSolicitudesSection() {
-    return _isLoadingSolicitudes
-        ? Center(child: CircularProgressIndicator())
-        : _errorSolicitudes != null
-            ? Center(
-                child: Text(
-                  _errorSolicitudes!,
-                  style: TextStyle(color: Colors.red, fontSize: 16),
-                ),
-              )
-            : _solicitudes.isEmpty
-                ? Center(
-                    child: Text("No hay solicitudes para esta línea."),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    physics: NeverScrollableScrollPhysics(),
-                    itemCount: _solicitudes.length,
-                    itemBuilder: (context, index) {
-                      final solicitud = _solicitudes[index];
-
-                      return Card(
-                        elevation: 3,
-                        margin: EdgeInsets.symmetric(vertical: 8),
-                        child: ListTile(
-                          title: Text(
-                              "Materia Prima: ${solicitud["materia_prima"]}"),
-                          subtitle: Text("Estado: ${solicitud["estado"]}"),
-                          trailing: Text(
-                            solicitud["fecha"],
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ),
-                      );
-                    },
-                  );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Petición de Material - Operario")),
-      body: Padding(
-        padding: EdgeInsets.all(20.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildDropdown("Seleccione una línea", _lineas, _selectedLinea,
-                  (value) {
-                setState(() {
-                  _selectedLinea = value;
-                  _fetchSolicitudes(); // Cargar solicitudes de la línea seleccionada
-                });
-              }),
-              _buildDropdown("Seleccione una denominación", _denominaciones,
-                  _selectedDenominacion, (value) {
-                setState(() {
-                  _selectedDenominacion = value;
-                });
-              }),
-              _buildDropdown("Referencia Sólida (No)", _referenciasSolidas,
-                  _selectedReferenciaSolida, (value) {
-                setState(() {
-                  _selectedReferenciaSolida = value;
-                });
-              }),
-              _buildDropdown(
-                  "Materia Prima", _materiasPrimas, _selectedMateriaPrima,
-                  (value) {
-                setState(() {
-                  _selectedMateriaPrima = value;
-                });
-              }),
-              SizedBox(height: 20),
-              ElevatedButton(
-                onPressed:
-                    _selectedMateriaPrimaId != null ? _enviarSolicitud : null,
-                child: Text("SOLICITAR"),
-              ),
-              if (_successMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Text(
-                    _successMessage!,
-                    style: TextStyle(color: Colors.green, fontSize: 16),
+    return Container(
+      color: Colors.grey[50],
+      child: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildDropdown("Línea", _lineas, _selectedLinea, (value) {
+                    setState(() {
+                      _selectedLinea = value;
+                      _selectedDenominacion = null;
+                      _selectedReferenciaSolida = null;
+                      _selectedMateriaPrima = null;
+                      _selectedMateriaPrimaId = null;
+                      _denominaciones = _data
+                          .where((item) => item['linea'] == value)
+                          .map((item) => item['denominacion'].toString())
+                          .toSet()
+                          .toList();
+                    });
+                    widget
+                        .onLineaSelected(value); // Notificar el cambio de línea
+                  }),
+                  _buildDropdown(
+                      "Denominación", _denominaciones, _selectedDenominacion,
+                      (value) {
+                    setState(() {
+                      _selectedDenominacion = value;
+                      _selectedReferenciaSolida = null;
+                      _selectedMateriaPrima = null;
+                      _selectedMateriaPrimaId = null;
+                      _referenciasSolidas = _data
+                          .where((item) =>
+                              item['linea'] == _selectedLinea &&
+                              item['denominacion'] == value)
+                          .map((item) => item['no'].toString())
+                          .toSet()
+                          .toList();
+                    });
+                  }),
+                  _buildDropdown("Referencia Sólida", _referenciasSolidas,
+                      _selectedReferenciaSolida, (value) {
+                    setState(() {
+                      _selectedReferenciaSolida = value;
+                      _selectedMateriaPrima = null;
+                      _selectedMateriaPrimaId = null;
+                      _materiasPrimas = _data
+                          .where((item) =>
+                              item['linea'] == _selectedLinea &&
+                              item['denominacion'] == _selectedDenominacion &&
+                              item['no'] == value)
+                          .map((item) => item['refpt'].toString())
+                          .toSet()
+                          .toList();
+                    });
+                  }),
+                  _buildDropdown(
+                      "Materia Prima", _materiasPrimas, _selectedMateriaPrima,
+                      (value) {
+                    setState(() {
+                      _selectedMateriaPrima = value;
+                      _selectedMateriaPrimaId = _data.firstWhere(
+                        (item) => item['refpt'] == value,
+                        orElse: () => {},
+                      )['id'];
+                    });
+                  }),
+                  SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _selectedMateriaPrimaId != null
+                        ? _enviarSolicitud
+                        : null,
+                    child: Text("SOLICITAR"),
                   ),
-                ),
-              SizedBox(height: 20),
-              Text("Solicitudes realizadas:",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              SizedBox(height: 10),
-              _buildSolicitudesSection(),
-            ],
-          ),
-        ),
-      ),
+                  if (_successMessage != null)
+                    Padding(
+                      padding: EdgeInsets.only(top: 16),
+                      child: Text(
+                        _successMessage!,
+                        style: TextStyle(
+                          color: _successMessage!.contains("Error")
+                              ? Colors.red
+                              : Colors.green,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }
