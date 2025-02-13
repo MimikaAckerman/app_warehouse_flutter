@@ -3,6 +3,8 @@ import 'peticion_material_operario_screen.dart';
 import 'visualizar_peticiones_operario_screen.dart';
 
 class MainOperarioScreen extends StatefulWidget {
+  const MainOperarioScreen({super.key});
+
   @override
   _MainOperarioScreenState createState() => _MainOperarioScreenState();
 }

@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class OperarioScreen extends StatefulWidget {
+  const OperarioScreen({super.key});
+
   @override
   _OperarioScreenState createState() => _OperarioScreenState();
 }

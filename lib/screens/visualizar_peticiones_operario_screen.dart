@@ -7,9 +7,9 @@ class VisualizarPeticionesOperarioScreen extends StatefulWidget {
   final String? lineaSeleccionada;
 
   const VisualizarPeticionesOperarioScreen({
-    Key? key,
+    super.key,
     required this.lineaSeleccionada,
-  }) : super(key: key);
+  });
 
   @override
   _VisualizarPeticionesOperarioScreenState createState() =>
