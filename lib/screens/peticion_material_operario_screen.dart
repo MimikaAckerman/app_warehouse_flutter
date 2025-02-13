@@ -23,6 +23,9 @@ class _PeticionMaterialOperarioScreenState
   List<String> _referenciasSolidas = [];
   List<String> _materiasPrimas = [];
 
+  List<Map<String, dynamic>> recogidaData = [];
+  List<Map<String, dynamic>> filteredRecogidaData = [];
+
   String? _selectedLinea;
   String? _selectedDenominacion;
   String? _selectedReferenciaSolida;
@@ -106,34 +109,79 @@ class _PeticionMaterialOperarioScreenState
 
 //solicitud de recogida de material
   Future<void> registrarRecogidaMaterial() async {
-    if (_selectedMateriaPrimaId == null) {
+    if (_selectedLinea == null) {
       setState(() {
-        toastMessage = 'Debe seleccionar una materia prima';
+        toastMessage = 'Debe seleccionar una línea';
         showToast = true;
       });
       return;
     }
 
-    final url =
-        'https://api-psc-warehouse.azurewebsites.net/status-recogida/${_selectedMateriaPrimaId}/status/PENDIENTE';
-
     try {
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
+      final response = await http.get(
+        Uri.parse('https://api-psc-warehouse.azurewebsites.net/lrefs'),
       );
 
       if (response.statusCode == 200) {
-        setState(() {
-          toastMessage = 'Recogida de material registrada como PENDIENTE';
-          showToast = true;
-        });
+        final data = jsonDecode(response.body);
+        final peticion = data.firstWhere(
+          (item) => item['linea'] == _selectedLinea,
+          orElse: () => {},
+        );
+
+        final peticionId = peticion['id'];
+
+        if (peticionId == null) {
+          setState(() {
+            toastMessage = 'No se encontró el ID de la petición';
+            showToast = true;
+          });
+          return;
+        }
+
+        final url =
+            'https://api-psc-warehouse.azurewebsites.net/status-recogida/$peticionId/status/PENDIENTE';
+
+        final recogidaResponse = await http.put(
+          Uri.parse(url),
+          headers: {'Content-Type': 'application/json'},
+        );
+
+        if (recogidaResponse.statusCode == 200) {
+          setState(() {
+            toastMessage = 'Recogida de material registrada como PENDIENTE';
+            showToast = true;
+          });
+
+          // Actualizar la interfaz de usuario con la nueva solicitud de recogida
+          final newRecogida = {
+            'id': peticionId,
+            'linea': _selectedLinea,
+            'status_recogida': 'PENDIENTE',
+            'timeHour': DateTime.now().toString(),
+          };
+
+          setState(() {
+            recogidaData.add(newRecogida);
+            filteredRecogidaData = recogidaData
+                .where((recogida) =>
+                    recogida['linea'] == _selectedLinea &&
+                    recogida['status_recogida'] != 'RECOGIDO')
+                .toList();
+          });
+        } else {
+          final errorData = jsonDecode(recogidaResponse.body);
+          print("Error de la API: $errorData");
+          setState(() {
+            toastMessage =
+                'Error al registrar la recogida: ${errorData['message']}';
+            showToast = true;
+          });
+        }
       } else {
-        final errorData = jsonDecode(response.body);
-        print("Error de la API: $errorData");
+        print("Error al obtener los datos de la API");
         setState(() {
-          toastMessage =
-              'Error al registrar la recogida: ${errorData['message']}';
+          toastMessage = 'Error al obtener los datos de la API';
           showToast = true;
         });
       }
@@ -145,7 +193,6 @@ class _PeticionMaterialOperarioScreenState
       });
     }
   }
-
 //boton de support en la linea
 
   Future<void> registrarSupport() async {
