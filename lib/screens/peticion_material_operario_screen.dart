@@ -32,6 +32,9 @@ class _PeticionMaterialOperarioScreenState
   String? _selectedMateriaPrima;
   String? _selectedMateriaPrimaId;
 
+  String? _selectedNo;
+  String? _selectedRefpt;
+
   bool _isLoading = true;
   String? _successMessage;
 
@@ -111,90 +114,57 @@ class _PeticionMaterialOperarioScreenState
   Future<void> registrarRecogidaMaterial() async {
     if (_selectedLinea == null) {
       setState(() {
-        toastMessage = 'Debe seleccionar una línea';
-        showToast = true;
+        _successMessage = 'Debe seleccionar al menos la línea';
       });
       return;
     }
 
     try {
-      final response = await http.get(
-        Uri.parse('https://api-psc-warehouse.azurewebsites.net/lrefs'),
+      final peticion = _data.firstWhere(
+        (item) => item['linea'] == _selectedLinea,
+        orElse: () => {},
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final peticion = data.firstWhere(
-          (item) => item['linea'] == _selectedLinea,
-          orElse: () => {},
-        );
-
-        final peticionId = peticion['id'];
-
-        if (peticionId == null) {
-          setState(() {
-            toastMessage = 'No se encontró el ID de la petición';
-            showToast = true;
-          });
-          return;
-        }
-
-        final url =
-            'https://api-psc-warehouse.azurewebsites.net/status-recogida/$peticionId/status/PENDIENTE';
-
-        final recogidaResponse = await http.put(
-          Uri.parse(url),
-          headers: {'Content-Type': 'application/json'},
-        );
-
-        if (recogidaResponse.statusCode == 200) {
-          setState(() {
-            toastMessage = 'Recogida de material registrada como PENDIENTE';
-            showToast = true;
-          });
-
-          // Actualizar la interfaz de usuario con la nueva solicitud de recogida
-          final newRecogida = {
-            'id': peticionId,
-            'linea': _selectedLinea,
-            'status_recogida': 'PENDIENTE',
-            'timeHour': DateTime.now().toString(),
-          };
-
-          setState(() {
-            recogidaData.add(newRecogida);
-            filteredRecogidaData = recogidaData
-                .where((recogida) =>
-                    recogida['linea'] == _selectedLinea &&
-                    recogida['status_recogida'] != 'RECOGIDO')
-                .toList();
-          });
-        } else {
-          final errorData = jsonDecode(recogidaResponse.body);
-          print("Error de la API: $errorData");
-          setState(() {
-            toastMessage =
-                'Error al registrar la recogida: ${errorData['message']}';
-            showToast = true;
-          });
-        }
-      } else {
-        print("Error al obtener los datos de la API");
+      if (peticion.isEmpty) {
         setState(() {
-          toastMessage = 'Error al obtener los datos de la API';
-          showToast = true;
+          _successMessage = 'No se encontró un ID para la línea seleccionada';
+        });
+        return;
+      }
+
+      final peticionId = peticion['id'];
+      final url = 'https://api-psc-warehouse.azurewebsites.net/status-material';
+      final recogidaResponse = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'linea': _selectedLinea,
+          'status_recogida': 'PENDIENTE',
+        }),
+      );
+
+      if (recogidaResponse.statusCode == 200) {
+        setState(() {
+          _successMessage = 'Recogida de material registrada como PENDIENTE';
+        });
+      } else {
+        final errorData = jsonDecode(recogidaResponse.body);
+        setState(() {
+          _successMessage =
+              'Error al registrar la recogida: ${errorData['message']}';
         });
       }
     } catch (error) {
-      print('Error al enviar la solicitud: $error');
+      print("❌ Error al enviar la solicitud: $error");
       setState(() {
-        toastMessage = 'Error al realizar la solicitud';
-        showToast = true;
+        _successMessage = 'Error al realizar la solicitud';
       });
     }
   }
-//boton de support en la linea
 
+//boton de support en la linea
   Future<void> registrarSupport() async {
     if (selectedLinea == null) {
       setState(() {
