@@ -18,64 +18,61 @@ class VisualizarPeticionesOperarioScreen extends StatefulWidget {
 
 class _VisualizarPeticionesOperarioScreenState
     extends State<VisualizarPeticionesOperarioScreen> {
+  // Peticiones de curso-products (SOLICITADO)
   List<Map<String, dynamic>> _peticiones = [];
+
+  // Peticiones de status-recogida (PENDIENTE / RECOGIDO)
+  List<Map<String, dynamic>> _recogidaPeticiones = [];
+
   bool _isLoading = false;
   String? _error;
-  StreamController<List<Map<String, dynamic>>>? _peticionesController;
+
+  // Para refresco automático
   Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
-    _initPeticionesStream();
+    _startAutoRefresh();
   }
 
   @override
   void didUpdateWidget(VisualizarPeticionesOperarioScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.lineaSeleccionada != widget.lineaSeleccionada) {
-      _restartStream();
+      // Cuando cambia la línea, volvemos a refrescar
+      _fetchPeticiones();
+      _fetchRecogidaPeticiones();
     }
   }
 
-  void _initPeticionesStream() {
-    _peticionesController = StreamController<List<Map<String, dynamic>>>();
-    _peticionesController?.stream.listen((peticiones) {
-      if (mounted) {
-        setState(() {
-          _peticiones = peticiones;
-          _isLoading = false;
-        });
-      }
-    });
-
-    // Iniciar actualizaciones automáticas
-    _startAutoRefresh();
-  }
-
   void _startAutoRefresh() {
-    // Cancelar el timer existente si hay uno
+    // Cancelar timer previo si existía
     _refreshTimer?.cancel();
 
-    // Hacer la primera carga inmediatamente
+    // Cargar de inmediato
     _fetchPeticiones();
+    _fetchRecogidaPeticiones();
 
-    // Configurar actualizaciones automáticas cada 5 segundos
-    _refreshTimer = Timer.periodic(Duration(seconds: 5), (timer) {
+    // Refrescar cada 5s
+    _refreshTimer = Timer.periodic(Duration(seconds: 5), (_) {
       if (mounted && widget.lineaSeleccionada != null) {
         _fetchPeticiones();
+        _fetchRecogidaPeticiones();
       }
     });
   }
 
-  void _restartStream() {
-    _peticionesController?.close();
-    _refreshTimer?.cancel();
-    _initPeticionesStream();
-  }
-
+  // =============================
+  // ========== CURSO-PRODUCTS ===
+  // =============================
   Future<void> _fetchPeticiones() async {
-    if (widget.lineaSeleccionada == null || !mounted) return;
+    if (widget.lineaSeleccionada == null) return;
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
 
     try {
       final response = await http.get(
@@ -86,47 +83,106 @@ class _VisualizarPeticionesOperarioScreenState
 
       if (response.statusCode == 200) {
         if (response.body.isEmpty) {
-          _peticionesController?.add([]);
+          setState(() {
+            _peticiones = [];
+            _isLoading = false;
+          });
           return;
         }
 
-        final dynamic decodedData = jsonDecode(response.body);
+        final decodedData = jsonDecode(response.body);
 
         if (decodedData == null || decodedData is! List) {
-          _peticionesController?.add([]);
+          setState(() {
+            _peticiones = [];
+            _isLoading = false;
+          });
           return;
         }
 
         final List<dynamic> rawData = decodedData;
 
+        // Filtrar: línea = líneaSeleccionada && status = SOLICITADO
         final peticionesFiltradas = rawData
             .where((item) =>
                 item['linea'] == widget.lineaSeleccionada &&
                 item['status'] == "SOLICITADO")
             .toList();
 
-        _peticionesController?.add(peticionesFiltradas
-            .map((item) => Map<String, dynamic>.from(item))
-            .toList());
-
         setState(() {
-          _error = null;
+          _peticiones = peticionesFiltradas
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+          _isLoading = false;
         });
       } else {
         setState(() {
-          _error = 'Error en la respuesta del servidor';
+          _error = 'Error en la respuesta del servidor (curso-products)';
+          _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = null;
+          _error = 'Error de conexión con el servidor (curso-products)';
+          _isLoading = false;
         });
       }
     }
   }
 
-//cambio de estado de la solicitud de material
+  // =============================
+  // ========== STATUS-RECOGIDA ==
+  // =============================
+  Future<void> _fetchRecogidaPeticiones() async {
+    if (widget.lineaSeleccionada == null) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+            "https://api-psc-warehouse.azurewebsites.net/status-recogida"),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        if (response.body.isEmpty) {
+          setState(() {
+            _recogidaPeticiones = [];
+          });
+          return;
+        }
+
+        final decodedData = jsonDecode(response.body);
+
+        if (decodedData == null || decodedData is! List) {
+          setState(() {
+            _recogidaPeticiones = [];
+          });
+          return;
+        }
+
+        // Filtrar las solicitudes de recogida por la línea
+        final List<dynamic> rawRecogida = decodedData;
+        final recogidasFiltradas = rawRecogida
+            .where((item) => item['linea'] == widget.lineaSeleccionada)
+            .toList();
+
+        setState(() {
+          _recogidaPeticiones = recogidasFiltradas
+              .map((item) => Map<String, dynamic>.from(item))
+              .toList();
+        });
+      } else {
+        print("Error: ${response.statusCode} - ${response.body}");
+      }
+    } catch (e) {
+      print("Error al obtener solicitudes de recogida: $e");
+    }
+  }
+
+  // =============================
+
   Future<void> _cambiarEstadoAFinalizado(String productId) async {
     try {
       final response = await http.put(
@@ -135,14 +191,12 @@ class _VisualizarPeticionesOperarioScreenState
       );
 
       if (response.statusCode == 200) {
-        // Actualizar la lista de peticiones después de cambiar el estado
+        // Actualizar la lista de peticiones
         await _fetchPeticiones();
       } else {
-        // Manejar el error de la API
         print('Error al cambiar el estado a FINALIZADO');
       }
     } catch (e) {
-      // Manejar el error de la solicitud
       print('Error de conexión al cambiar el estado a FINALIZADO');
     }
   }
@@ -240,7 +294,7 @@ class _VisualizarPeticionesOperarioScreenState
     );
   }
 
-  Widget _buildEmptyWidget() {
+  Widget _buildEmptyWidget(String texto) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -252,9 +306,7 @@ class _VisualizarPeticionesOperarioScreenState
           ),
           SizedBox(height: 16),
           Text(
-            widget.lineaSeleccionada == null
-                ? 'Seleccione una línea para ver las peticiones'
-                : 'No hay peticiones activas para esta línea',
+            texto,
             style: TextStyle(
               color: Colors.grey[600],
               fontSize: 16,
@@ -266,6 +318,74 @@ class _VisualizarPeticionesOperarioScreenState
     );
   }
 
+  // Sección de peticiones del curso-products
+  Widget _buildPeticionesSection() {
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator());
+    } else if (_error != null) {
+      return Center(
+        child: Text(
+          _error!,
+          style: TextStyle(color: Colors.red),
+        ),
+      );
+    } else if (_peticiones.isEmpty) {
+      return _buildEmptyWidget(
+        widget.lineaSeleccionada == null
+            ? 'Seleccione una línea para ver las peticiones'
+            : 'No hay peticiones activas (SOLICITADO) para esta línea',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchPeticiones,
+      child: ListView.builder(
+        padding: EdgeInsets.all(16),
+        shrinkWrap: true,
+        physics: NeverScrollableScrollPhysics(),
+        itemCount: _peticiones.length,
+        itemBuilder: (context, index) {
+          return _buildPeticionCard(_peticiones[index]);
+        },
+      ),
+    );
+  }
+
+  // Sección de solicitudes de recogida
+  Widget _buildRecogidaSection() {
+    if (_recogidaPeticiones.isEmpty && widget.lineaSeleccionada != null) {
+      return _buildEmptyWidget(
+          'No hay solicitudes de recogida para la línea ${widget.lineaSeleccionada}');
+    }
+
+    // Muestra la lista de recogida
+    return ListView.builder(
+      padding: EdgeInsets.all(16),
+      shrinkWrap: true,
+      physics: NeverScrollableScrollPhysics(),
+      itemCount: _recogidaPeticiones.length,
+      itemBuilder: (context, index) {
+        final recogida = _recogidaPeticiones[index];
+        return Card(
+          elevation: 2,
+          margin: EdgeInsets.symmetric(vertical: 8, horizontal: 0),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            title: Text(
+              'Línea: ${recogida['linea'] ?? ''}',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              'Estado Recogida: ${recogida['status_recogida'] ?? ''}\nHora: ${recogida['timeHour'] ?? ''}',
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -273,6 +393,7 @@ class _VisualizarPeticionesOperarioScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Encabezado
           Container(
             padding: EdgeInsets.all(16),
             color: Colors.grey[100],
@@ -280,7 +401,7 @@ class _VisualizarPeticionesOperarioScreenState
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Peticiones Activas ${widget.lineaSeleccionada != null ? "- Línea ${widget.lineaSeleccionada}" : ""}',
+                  'Solicitudes Activas: ${widget.lineaSeleccionada ?? ""}',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -288,33 +409,49 @@ class _VisualizarPeticionesOperarioScreenState
                 ),
                 IconButton(
                   icon: Icon(Icons.refresh),
-                  onPressed: _fetchPeticiones,
+                  onPressed: () {
+                    _fetchPeticiones();
+                    _fetchRecogidaPeticiones();
+                  },
                 ),
               ],
             ),
           ),
+          // Lista de peticiones (curso-products)
           Expanded(
-            child: _isLoading
-                ? Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(
-                        child: Text(
-                          _error!,
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      )
-                    : _peticiones.isEmpty
-                        ? _buildEmptyWidget()
-                        : RefreshIndicator(
-                            onRefresh: _fetchPeticiones,
-                            child: ListView.builder(
-                              padding: EdgeInsets.all(16),
-                              itemCount: _peticiones.length,
-                              itemBuilder: (context, index) {
-                                return _buildPeticionCard(_peticiones[index]);
-                              },
-                            ),
-                          ),
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  // Sección de Peticiones (estado SOLICITADO)
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'Peticiones (SOLICITADO)',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
+                  ),
+                  _buildPeticionesSection(),
+
+                  // Sección de Recogidas
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Text(
+                      'Solicitudes de Recogida',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueGrey,
+                      ),
+                    ),
+                  ),
+                  _buildRecogidaSection(),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -324,7 +461,6 @@ class _VisualizarPeticionesOperarioScreenState
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _peticionesController?.close();
     super.dispose();
   }
 }
