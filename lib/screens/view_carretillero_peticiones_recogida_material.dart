@@ -17,7 +17,7 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
   @override
   void initState() {
     super.initState();
-    fetchSolicitudesRecogida();
+    _fetchSolicitudesRecogida();
     _startAutoRefresh();
   }
 
@@ -31,12 +31,12 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(Duration(seconds: 5), (_) {
       if (mounted) {
-        fetchSolicitudesRecogida();
+        _fetchSolicitudesRecogida();
       }
     });
   }
 
-  Future<void> fetchSolicitudesRecogida() async {
+  Future<void> _fetchSolicitudesRecogida() async {
     try {
       final response = await http.get(
         Uri.parse(
@@ -47,22 +47,34 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
         if (response.body.isNotEmpty) {
           final decodedData = jsonDecode(response.body);
           if (decodedData != null && decodedData is List) {
-            List<Map<String, dynamic>> nuevasSolicitudes = decodedData
-                .map<Map<String, dynamic>>(
-                    (item) => Map<String, dynamic>.from(item))
-                .where((item) => item['status_recogida'] != 'FINALIZADO')
-                .toList();
-
-            if (mounted) {
-              setState(() {
-                _solicitudesRecogida = nuevasSolicitudes;
-              });
-            }
+            setState(() {
+              _solicitudesRecogida = decodedData
+                  .map<Map<String, dynamic>>(
+                      (item) => Map<String, dynamic>.from(item))
+                  .toList();
+            });
           }
         }
       }
     } catch (e) {
       print("Error al obtener solicitudes de recogida: $e");
+    }
+  }
+
+  Future<void> _marcarComoRecogido(String id) async {
+    try {
+      final response = await http.put(
+        Uri.parse(
+            "https://api-psc-warehouse.azurewebsites.net/status-recogida/$id/status/RECOGIDO"),
+      );
+
+      if (response.statusCode == 200) {
+        _fetchSolicitudesRecogida();
+      } else {
+        print("Error al actualizar el estado a RECOGIDO");
+      }
+    } catch (e) {
+      print("Error al actualizar la solicitud de recogida: $e");
     }
   }
 
@@ -84,6 +96,13 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
             Text("Estado Recogida: ${solicitud['status_recogida'] ?? 'N/A'}"),
             Text("Hora: ${solicitud['timeHour'] ?? 'N/A'}"),
           ],
+        ),
+        trailing: ElevatedButton(
+          onPressed: () => _marcarComoRecogido(solicitud['id'].toString()),
+          child: Text("RECOGIDO"),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+          ),
         ),
       ),
     );

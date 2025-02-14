@@ -61,6 +61,18 @@ class _ViewCarretilleroPeticionesMaterialState
   }
 
   Widget _buildSolicitudCard(Map<String, dynamic> solicitud) {
+    String? selectedEstado = solicitud['status'];
+    List<String> estadosDisponibles = [
+      "PENDIENTE",
+      "EN CURSO",
+      "FINALIZADO",
+    ];
+
+    if (selectedEstado == null ||
+        !estadosDisponibles.contains(selectedEstado)) {
+      selectedEstado = "PENDIENTE";
+    }
+
     return Card(
       elevation: 3,
       margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -78,7 +90,28 @@ class _ViewCarretilleroPeticionesMaterialState
             Text("Línea: ${solicitud['linea'] ?? 'N/A'}"),
             Text("Denominación: ${solicitud['denominacion'] ?? 'N/A'}"),
             Text("Materia Prima: ${solicitud['refpt'] ?? 'N/A'}"),
-            Text("Estado: ${solicitud['status'] ?? 'N/A'}"),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("Estado: "),
+                DropdownButton<String>(
+                  value: selectedEstado,
+                  items: estadosDisponibles.map((String estado) {
+                    return DropdownMenuItem<String>(
+                      value: estado,
+                      child: Text(estado),
+                    );
+                  }).toList(),
+                  onChanged: (String? newValue) {
+                    if (newValue != null) {
+                      setState(() {
+                        solicitud['status'] = newValue;
+                      });
+                    }
+                  },
+                ),
+              ],
+            ),
           ],
         ),
       ),
