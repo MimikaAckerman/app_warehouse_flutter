@@ -73,7 +73,10 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
 
       if (response.statusCode == 200) {
         print('Estado de recogida actualizado a RECOGIDO');
-        _fetchSolicitudesRecogida();
+        setState(() {
+          _solicitudesRecogida.removeWhere(
+              (solicitud) => solicitud['id_status'].toString() == id);
+        });
       } else {
         print('Error al actualizar el estado de recogida');
         print('Código de estado: ${response.statusCode}');
@@ -104,8 +107,13 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
             SizedBox(height: 8),
             ElevatedButton(
               onPressed: solicitud['status_recogida'] != 'RECOGIDO'
-                  ? () => actualizarEstadoRecogida(
-                      solicitud['id_status'].toString())
+                  ? () {
+                      actualizarEstadoRecogida(
+                          solicitud['id_status'].toString());
+                      setState(() {
+                        solicitud['status_recogida'] = 'RECOGIDO';
+                      });
+                    }
                   : null,
               child: Text('RECOGIDO'),
             ),
