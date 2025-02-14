@@ -89,6 +89,26 @@ class _ViewCarretilleroPeticionesMaterialState
     }
   }
 
+  Color _determineCardColor(Map<String, dynamic> solicitud) {
+    // Check if createdAt exists and is a valid timestamp
+    if (solicitud['createdAt'] != null) {
+      DateTime createdAt = DateTime.parse(solicitud['createdAt']);
+      Duration difference = DateTime.now().difference(createdAt);
+
+      // If waiting time is more than 10 minutes, return red
+      if (difference.inMinutes > 10) {
+        return const Color.fromARGB(255, 236, 34, 34)!;
+      }
+      // If waiting time is more than 5 minutes, return orange
+      if (difference.inMinutes > 5) {
+        return const Color.fromARGB(255, 231, 96, 43)!;
+      }
+    }
+
+    // Default to light grey if no conditions met
+    return const Color.fromARGB(255, 129, 128, 128)!;
+  }
+
   Widget _buildSolicitudCard(Map<String, dynamic> solicitud) {
     String? selectedEstado = solicitud['status'];
     List<String> estadosDisponibles = [
@@ -103,8 +123,8 @@ class _ViewCarretilleroPeticionesMaterialState
     }
 
     return Card(
-      color: const Color.fromARGB(
-          255, 136, 134, 134), // Add grey color to the card
+      color:
+          _determineCardColor(solicitud), // Dynamic color based on waiting time
       elevation: 3,
       margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       shape: RoundedRectangleBorder(
@@ -121,6 +141,8 @@ class _ViewCarretilleroPeticionesMaterialState
             Text("Línea: ${solicitud['linea'] ?? 'N/A'}"),
             Text("Denominación: ${solicitud['denominacion'] ?? 'N/A'}"),
             Text("Materia Prima: ${solicitud['refpt'] ?? 'N/A'}"),
+            // Optional: display waiting time for debugging
+            Text("Tiempo de espera: ${_calculateWaitingTime(solicitud)}"),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -149,6 +171,19 @@ class _ViewCarretilleroPeticionesMaterialState
         ),
       ),
     );
+  }
+
+  String _calculateWaitingTime(Map<String, dynamic> solicitud) {
+    if (solicitud['createdAt'] != null) {
+      DateTime createdAt = DateTime.parse(solicitud['createdAt']);
+      Duration difference = DateTime.now().difference(createdAt);
+
+      if (difference.inMinutes > 0) {
+        return "${difference.inMinutes} minutos";
+      }
+      return "${difference.inSeconds} segundos";
+    }
+    return "Tiempo desconocido";
   }
 
   @override
