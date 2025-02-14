@@ -60,12 +60,34 @@ class _ViewCarretilleroPeticionesMaterialState
     }
   }
 
+  Future<void> actualizarEstado(String id, String newStatus) async {
+    try {
+      final response = await http.put(
+        Uri.parse(
+            "https://api-psc-warehouse.azurewebsites.net/curso-product/$id/status/$newStatus"),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        print("Estado actualizado correctamente");
+        fetchSolicitudes(); // Actualizar la lista de solicitudes después de cambiar el estado
+      } else {
+        print("Error al actualizar el estado");
+        print("Código de estado: ${response.statusCode}");
+        print("Cuerpo de la respuesta: ${response.body}");
+      }
+    } catch (e) {
+      print("Error en la solicitud de actualización: $e");
+    }
+  }
+
   Widget _buildSolicitudCard(Map<String, dynamic> solicitud) {
     String? selectedEstado = solicitud['status'];
     List<String> estadosDisponibles = [
       "PENDIENTE",
       "EN CURSO",
       "FINALIZADO",
+      "SOLICITADO"
     ];
 
     if (selectedEstado == null ||
@@ -102,11 +124,13 @@ class _ViewCarretilleroPeticionesMaterialState
                       child: Text(estado),
                     );
                   }).toList(),
-                  onChanged: (String? newValue) {
+                  onChanged: (String? newValue) async {
                     if (newValue != null) {
                       setState(() {
                         solicitud['status'] = newValue;
                       });
+                      await actualizarEstado(
+                          solicitud['id'].toString(), newValue);
                     }
                   },
                 ),
@@ -120,11 +144,18 @@ class _ViewCarretilleroPeticionesMaterialState
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: _solicitudes.length,
-      itemBuilder: (context, index) {
-        return _buildSolicitudCard(_solicitudes[index]);
-      },
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Peticiones de Material'),
+      ),
+      body: _solicitudes.isEmpty
+          ? Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: _solicitudes.length,
+              itemBuilder: (context, index) {
+                return _buildSolicitudCard(_solicitudes[index]);
+              },
+            ),
     );
   }
 }

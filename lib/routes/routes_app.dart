@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../screens/panel_screen.dart';
 import '../screens/operario_screen.dart';
-import '../screens/carretillero_screen.dart';
+import '../screens/main_carretillero_screen.dart';
 import '../screens/main_operario_screen.dart';
 
 // Definimos las rutas como constantes para evitar errores de escritura
