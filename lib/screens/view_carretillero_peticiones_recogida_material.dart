@@ -51,6 +51,7 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
               _solicitudesRecogida = decodedData
                   .map<Map<String, dynamic>>(
                       (item) => Map<String, dynamic>.from(item))
+                  .where((item) => item['status_recogida'] != 'RECOGIDO')
                   .toList();
             });
           }
@@ -61,20 +62,25 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
     }
   }
 
-  Future<void> _marcarComoRecogido(String id) async {
+  Future<void> actualizarEstadoRecogida(String id) async {
     try {
+      final url =
+          'https://api-psc-warehouse.azurewebsites.net/status-recogida/$id/status/RECOGIDO';
       final response = await http.put(
-        Uri.parse(
-            "https://api-psc-warehouse.azurewebsites.net/status-recogida/$id/status/RECOGIDO"),
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
       );
 
       if (response.statusCode == 200) {
+        print('Estado de recogida actualizado a RECOGIDO');
         _fetchSolicitudesRecogida();
       } else {
-        print("Error al actualizar el estado a RECOGIDO");
+        print('Error al actualizar el estado de recogida');
+        print('Código de estado: ${response.statusCode}');
+        print('Cuerpo de la respuesta: ${response.body}');
       }
     } catch (e) {
-      print("Error al actualizar la solicitud de recogida: $e");
+      print('Error en la solicitud de actualización: $e');
     }
   }
 
@@ -87,22 +93,23 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
       ),
       child: ListTile(
         title: Text(
-          "Línea: ${solicitud['linea'] ?? 'N/A'}",
+          solicitud['linea'] ?? 'N/A',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Estado Recogida: ${solicitud['status_recogida'] ?? 'N/A'}"),
-            Text("Hora: ${solicitud['timeHour'] ?? 'N/A'}"),
+            Text('Hora: ${solicitud['timeHour'] ?? 'N/A'}'),
+            Text('Estado: ${solicitud['status_recogida'] ?? 'N/A'}'),
+            SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: solicitud['status_recogida'] != 'RECOGIDO'
+                  ? () => actualizarEstadoRecogida(
+                      solicitud['id_status'].toString())
+                  : null,
+              child: Text('RECOGIDO'),
+            ),
           ],
-        ),
-        trailing: ElevatedButton(
-          onPressed: () => _marcarComoRecogido(solicitud['id'].toString()),
-          child: Text("RECOGIDO"),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-          ),
         ),
       ),
     );
@@ -110,11 +117,18 @@ class _ViewCarretilleroPeticionesRecogidaMaterialState
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      itemCount: _solicitudesRecogida.length,
-      itemBuilder: (context, index) {
-        return _buildSolicitudCard(_solicitudesRecogida[index]);
-      },
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Solicitudes de Recogida'),
+      ),
+      body: _solicitudesRecogida.isEmpty
+          ? Center(child: Text('No hay solicitudes de recogida pendientes'))
+          : ListView.builder(
+              itemCount: _solicitudesRecogida.length,
+              itemBuilder: (context, index) {
+                return _buildSolicitudCard(_solicitudesRecogida[index]);
+              },
+            ),
     );
   }
 }
