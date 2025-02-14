@@ -48,6 +48,7 @@ class _ViewCarretilleroPeticionesMaterialState
           if (decodedData != null && decodedData is List) {
             setState(() {
               _solicitudes = decodedData
+                  .where((item) => item['status'] != 'FINALIZADO')
                   .map<Map<String, dynamic>>(
                       (item) => Map<String, dynamic>.from(item))
                   .toList();
@@ -70,7 +71,14 @@ class _ViewCarretilleroPeticionesMaterialState
 
       if (response.statusCode == 200) {
         print("Estado actualizado correctamente");
-        fetchSolicitudes(); // Actualizar la lista de solicitudes después de cambiar el estado
+        if (newStatus == 'FINALIZADO') {
+          setState(() {
+            _solicitudes
+                .removeWhere((solicitud) => solicitud['id'].toString() == id);
+          });
+        } else {
+          fetchSolicitudes(); // Actualizar la lista de solicitudes después de cambiar el estado
+        }
       } else {
         print("Error al actualizar el estado");
         print("Código de estado: ${response.statusCode}");
@@ -87,7 +95,6 @@ class _ViewCarretilleroPeticionesMaterialState
       "PENDIENTE",
       "EN CURSO",
       "FINALIZADO",
-      "SOLICITADO"
     ];
 
     if (selectedEstado == null ||
