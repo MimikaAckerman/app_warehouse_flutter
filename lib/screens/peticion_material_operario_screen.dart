@@ -6,9 +6,9 @@ class PeticionMaterialOperarioScreen extends StatefulWidget {
   final Function(String?) onLineaSelected;
 
   const PeticionMaterialOperarioScreen({
-    Key? key,
+    super.key,
     required this.onLineaSelected,
-  }) : super(key: key);
+  });
 
   @override
   _PeticionMaterialOperarioScreenState createState() =>
