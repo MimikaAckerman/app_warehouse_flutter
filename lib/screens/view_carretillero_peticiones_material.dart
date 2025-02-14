@@ -13,6 +13,7 @@ class _ViewCarretilleroPeticionesMaterialState
     extends State<ViewCarretilleroPeticionesMaterial> {
   List<Map<String, dynamic>> _solicitudes = [];
   Timer? _refreshTimer;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -52,12 +53,27 @@ class _ViewCarretilleroPeticionesMaterialState
                   .map<Map<String, dynamic>>(
                       (item) => Map<String, dynamic>.from(item))
                   .toList();
+              _isLoading =
+                  false; // Actualizar _isLoading a false después de obtener las solicitudes
             });
           }
+        } else {
+          setState(() {
+            _isLoading =
+                false; // Actualizar _isLoading a false si no hay solicitudes
+          });
         }
+      } else {
+        setState(() {
+          _isLoading = false; // Actualizar _isLoading a false en caso de error
+        });
       }
     } catch (e) {
       print("Error al obtener solicitudes: $e");
+      setState(() {
+        _isLoading =
+            false; // Actualizar _isLoading a false en caso de excepción
+      });
     }
   }
 
@@ -155,14 +171,16 @@ class _ViewCarretilleroPeticionesMaterialState
       appBar: AppBar(
         title: Text('Peticiones de Material'),
       ),
-      body: _solicitudes.isEmpty
+      body: _isLoading
           ? Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              itemCount: _solicitudes.length,
-              itemBuilder: (context, index) {
-                return _buildSolicitudCard(_solicitudes[index]);
-              },
-            ),
+          : _solicitudes.isEmpty
+              ? Center(child: Text('No hay solicitudes disponibles'))
+              : ListView.builder(
+                  itemCount: _solicitudes.length,
+                  itemBuilder: (context, index) {
+                    return _buildSolicitudCard(_solicitudes[index]);
+                  },
+                ),
     );
   }
 }
