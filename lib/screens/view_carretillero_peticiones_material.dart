@@ -13,7 +13,6 @@ class _ViewCarretilleroPeticionesMaterialState
     extends State<ViewCarretilleroPeticionesMaterial> {
   List<Map<String, dynamic>> _solicitudes = [];
   Timer? _refreshTimer;
-  bool _isLoading = true;
 
   @override
   void initState() {
@@ -104,6 +103,8 @@ class _ViewCarretilleroPeticionesMaterialState
     }
 
     return Card(
+      color: const Color.fromARGB(
+          255, 136, 134, 134), // Add grey color to the card
       elevation: 3,
       margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
       shape: RoundedRectangleBorder(
