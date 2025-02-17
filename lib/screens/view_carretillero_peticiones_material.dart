@@ -13,17 +13,21 @@ class _ViewCarretilleroPeticionesMaterialState
     extends State<ViewCarretilleroPeticionesMaterial> {
   List<Map<String, dynamic>> _solicitudes = [];
   Timer? _refreshTimer;
+  Timer? _waitingTimeTimer;
+  Map<String, DateTime> _solicitudTimestamps = {};
 
   @override
   void initState() {
     super.initState();
     fetchSolicitudes();
     _startAutoRefresh();
+    _startWaitingTimeUpdate();
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _waitingTimeTimer?.cancel();
     super.dispose();
   }
 
@@ -32,6 +36,17 @@ class _ViewCarretilleroPeticionesMaterialState
     _refreshTimer = Timer.periodic(Duration(seconds: 5), (_) {
       if (mounted) {
         fetchSolicitudes();
+      }
+    });
+  }
+
+  void _startWaitingTimeUpdate() {
+    _waitingTimeTimer?.cancel();
+    _waitingTimeTimer = Timer.periodic(Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {
+          // Trigger rebuild to update waiting times
+        });
       }
     });
   }
@@ -49,9 +64,19 @@ class _ViewCarretilleroPeticionesMaterialState
             setState(() {
               _solicitudes = decodedData
                   .where((item) => item['status'] != 'FINALIZADO')
-                  .map<Map<String, dynamic>>(
-                      (item) => Map<String, dynamic>.from(item))
-                  .toList();
+                  .map<Map<String, dynamic>>((item) {
+                // Maintain existing timestamp or create new one
+                String itemId = item['id'].toString();
+                if (!_solicitudTimestamps.containsKey(itemId)) {
+                  _solicitudTimestamps[itemId] = DateTime.now();
+                }
+
+                // Add the tracked timestamp to the item
+                item['trackedCreatedAt'] =
+                    _solicitudTimestamps[itemId]!.toIso8601String();
+
+                return Map<String, dynamic>.from(item);
+              }).toList();
             });
           }
         }
@@ -75,6 +100,7 @@ class _ViewCarretilleroPeticionesMaterialState
           setState(() {
             _solicitudes
                 .removeWhere((solicitud) => solicitud['id'].toString() == id);
+            _solicitudTimestamps.remove(id);
           });
         } else {
           fetchSolicitudes(); // Actualizar la lista de solicitudes después de cambiar el estado
@@ -89,24 +115,58 @@ class _ViewCarretilleroPeticionesMaterialState
     }
   }
 
-  Color _determineCardColor(Map<String, dynamic> solicitud) {
-    // Check if createdAt exists and is a valid timestamp
-    if (solicitud['createdAt'] != null) {
-      DateTime createdAt = DateTime.parse(solicitud['createdAt']);
-      Duration difference = DateTime.now().difference(createdAt);
+  String _calculateWaitingTime(Map<String, dynamic> solicitud) {
+    try {
+      dynamic createdAtValue = solicitud['trackedCreatedAt'];
 
-      // If waiting time is more than 10 minutes, return red
-      if (difference.inMinutes > 10) {
-        return const Color.fromARGB(255, 236, 34, 34)!;
+      if (createdAtValue != null) {
+        DateTime createdAt = DateTime.parse(createdAtValue);
+        Duration difference = DateTime.now().difference(createdAt);
+
+        if (difference.inHours > 0) {
+          return "${difference.inHours} horas";
+        }
+        if (difference.inMinutes > 0) {
+          return "${difference.inMinutes} minutos";
+        }
+        return "${difference.inSeconds} segundos";
       }
-      // If waiting time is more than 5 minutes, return orange
-      if (difference.inMinutes > 5) {
-        return const Color.fromARGB(255, 231, 96, 43)!;
+    } catch (e) {
+      print("Error calculando tiempo de espera: $e");
+    }
+    return "Tiempo desconocido";
+  }
+
+  Color _determineCardColor(Map<String, dynamic> solicitud) {
+    if (solicitud['status'] == 'EN CURSO') {
+      return const Color.fromARGB(255, 12, 163, 12);
+    }
+
+    try {
+      dynamic createdAtValue = solicitud['trackedCreatedAt'];
+
+      if (createdAtValue != null) {
+        DateTime createdAt = DateTime.parse(createdAtValue);
+        Duration difference = DateTime.now().difference(createdAt);
+
+        print(
+            'Tiempo transcurrido: ${difference.inMinutes} minutos'); // Debug print
+
+        // If waiting time is more than 10 minutes, return red
+        if (difference.inMinutes > 10) {
+          return const Color.fromARGB(255, 243, 48, 48);
+        }
+        // If waiting time is more than 5 minutes, return orange
+        if (difference.inMinutes > 5) {
+          return const Color.fromARGB(255, 235, 100, 47);
+        }
       }
+    } catch (e) {
+      print("Error determinando color de la tarjeta: $e");
     }
 
     // Default to light grey if no conditions met
-    return const Color.fromARGB(255, 129, 128, 128)!;
+    return const Color.fromARGB(255, 170, 168, 168)!;
   }
 
   Widget _buildSolicitudCard(Map<String, dynamic> solicitud) {
@@ -141,7 +201,6 @@ class _ViewCarretilleroPeticionesMaterialState
             Text("Línea: ${solicitud['linea'] ?? 'N/A'}"),
             Text("Denominación: ${solicitud['denominacion'] ?? 'N/A'}"),
             Text("Materia Prima: ${solicitud['refpt'] ?? 'N/A'}"),
-            // Optional: display waiting time for debugging
             Text("Tiempo de espera: ${_calculateWaitingTime(solicitud)}"),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -171,19 +230,6 @@ class _ViewCarretilleroPeticionesMaterialState
         ),
       ),
     );
-  }
-
-  String _calculateWaitingTime(Map<String, dynamic> solicitud) {
-    if (solicitud['createdAt'] != null) {
-      DateTime createdAt = DateTime.parse(solicitud['createdAt']);
-      Duration difference = DateTime.now().difference(createdAt);
-
-      if (difference.inMinutes > 0) {
-        return "${difference.inMinutes} minutos";
-      }
-      return "${difference.inSeconds} segundos";
-    }
-    return "Tiempo desconocido";
   }
 
   @override
